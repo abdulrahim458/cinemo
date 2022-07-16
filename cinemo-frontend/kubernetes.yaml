@@ -1,0 +1,128 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cinemo-frontend
+  namespace: frontend
+spec:
+  selector:
+    app: cinemo-frontend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+  type: LoadBalancer
+status:
+  loadBalancer:
+    ingress:
+    - ip: <Load-balancer-ip> # we need to create a external ip and update that external IP here
+---
+apiVersion: autoscaling/v2beta1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: cinemo-frontend
+  namespace: frontend
+spec:
+  maxReplicas: 10
+  minReplicas: 3
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: cinemo-frontend
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      targetAverageUtilization: 90
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cinemo-frontend
+  namespace: "frontend"
+  labels:
+    app: cinemo-frontend
+spec:
+  replicas: 3
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app: cinemo-frontend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: cinemo-frontend
+    spec:
+      containers:
+      - name: filebeat
+        image: kodekloud/filebeat-configured
+        ports:
+        - containerPort: 9090
+        volumeMounts:
+        - name: log-volume
+          mountPath: /vat/log/event-simulator
+        resources:
+          limits:
+            cpu: 200m
+            memory: 150Mi
+          requests:
+            cpu: 20m
+            memory: 30Mi
+      - name: cinemo-frontend
+        image: kodekloud/cinemo-frontend:v1
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        volumeMounts:
+        - name: log-volume
+          mountPath: /log
+        resources:
+          limits:
+            cpu: 800m
+            memory: 768Mi
+          requests:
+            cpu: 500m
+            memory: 512Mi
+        securityContext:
+          runAsUser: 10002
+          runAsGroup: 10000
+          runAsNonRoot: true
+          readOnlyRootFilesystem: true
+          privileged: false
+          allowPrivilegeEscalation: false
+        readinessProbe:
+          exec:
+            command: 
+              - curl
+              - -f
+              - -s
+              -  http://127.0.0.1:8080/isAlive.jsp
+          initialDelaySeconds: 80
+          periodSeconds: 10
+          failureThreshold: 3
+          timeoutSeconds: 5
+        livenessProbe:
+          exec:
+            command: 
+              - curl
+              - -f
+              - -s
+              -  http://127.0.0.1:8080/isAlive.jsp
+          initialDelaySeconds: 80
+          periodSeconds: 10
+          failureThreshold: 3
+          timeoutSeconds: 5
+      volumes:
+      - name: log-volume
+        hostpath:
+          path: /var/log/webapp
+          type: DirectoryorCreate            
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
