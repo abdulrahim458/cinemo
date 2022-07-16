@@ -3,13 +3,8 @@
 #
 
 # Pull base image.
-FROM ubuntu
+FROM mongo
 
-# Install MongoDB.
-RUN \
-  apt-get update && \
-  apt-get install -y mongodb-org && \
-  rm -rf /var/lib/apt/lists/*
 
 # Mountable directories.
 VOLUME ["/data/db"]
